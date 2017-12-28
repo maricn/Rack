@@ -3,13 +3,19 @@ LOCAL = $(shell pwd)
 # Arch-specifics
 include ../arch.mk
 
+FLAGS += -g -O3 -march=nocona
+
 ifeq ($(ARCH),mac)
-	MACOS_FLAGS = -mmacosx-version-min=10.7 -stdlib=libc++
-	export CFLAGS = $(MACOS_FLAGS)
-	export CXXFLAGS = $(MACOS_FLAGS)
-	export CPPFLAGS = $(MACOS_FLAGS)
-	export LDFLAGS = $(MACOS_FLAGS)
+	FLAGS += -mmacosx-version-min=10.7 -stdlib=libc++
+	LDFLAGS += -mmacosx-version-min=10.7 -stdlib=libc++
 endif
+
+CFLAGS += $(FLAGS)
+CXXFLAGS += $(FLAGS)
+export CFLAGS
+export CXXFLAGS
+export LDFLAGS
+
 
 # Commands
 WGET = wget -nc
@@ -134,11 +140,10 @@ $(libzip):
 	$(MAKE) -C libzip-1.2.0 install
 
 $(rtmidi):
-	$(WGET) http://www.music.mcgill.ca/~gary/rtmidi/release/rtmidi-3.0.0.tar.gz
-	$(UNTAR) rtmidi-3.0.0.tar.gz
-	cd rtmidi-3.0.0 && ./configure --prefix="$(LOCAL)"
-	$(MAKE) -C rtmidi-3.0.0
-	$(MAKE) -C rtmidi-3.0.0 install
+	git clone https://github.com/thestk/rtmidi.git
+	cd rtmidi && ./autogen.sh --no-configure && ./configure --prefix="$(LOCAL)"
+	$(MAKE) -C rtmidi
+	$(MAKE) -C rtmidi install
 
 $(rtaudio):
 	cd rtaudio && mkdir -p cmakebuild
@@ -147,4 +152,4 @@ $(rtaudio):
 	$(MAKE) -C rtaudio/cmakebuild install
 
 clean:
-	git clean -ffdxi
+	git clean -ffdx
