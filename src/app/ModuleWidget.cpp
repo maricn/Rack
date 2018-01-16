@@ -68,7 +68,8 @@ json_t *ModuleWidget::toJson() {
 	// model
 	json_object_set_new(rootJ, "model", json_string(model->slug.c_str()));
 	// pos
-	json_t *posJ = json_pack("[f, f]", (double) box.pos.x, (double) box.pos.y);
+	Vec pos = box.pos.div(RACK_GRID_SIZE).round();
+	json_t *posJ = json_pack("[i, i]", (int) pos.x, (int) pos.y);
 	json_object_set_new(rootJ, "pos", posJ);
 	// params
 	json_t *paramsJ = json_array();
@@ -89,19 +90,50 @@ json_t *ModuleWidget::toJson() {
 }
 
 void ModuleWidget::fromJson(json_t *rootJ) {
+	// legacy
+	int legacy = 0;
+	json_t *legacyJ = json_object_get(rootJ, "legacy");
+	if (legacyJ)
+		legacy = json_integer_value(legacyJ);
+
 	// pos
 	json_t *posJ = json_object_get(rootJ, "pos");
 	double x, y;
 	json_unpack(posJ, "[F, F]", &x, &y);
-	box.pos = Vec(x, y);
+	Vec pos = Vec(x, y);
+	if (legacy && legacy <= 1) {
+		box.pos = pos;
+	}
+	else {
+		box.pos = pos.mult(RACK_GRID_SIZE);
+	}
 
 	// params
 	json_t *paramsJ = json_object_get(rootJ, "params");
-	size_t paramId;
+	size_t i;
 	json_t *paramJ;
-	json_array_foreach(paramsJ, paramId, paramJ) {
-		if (paramId < params.size()) {
-			params[paramId]->fromJson(paramJ);
+	json_array_foreach(paramsJ, i, paramJ) {
+		if (legacy && legacy <= 1) {
+			// The index in the array we're iterating is the index of the ParamWidget in the params vector.
+			if (i < params.size()) {
+				// Create upgraded version of param JSON object
+				json_t *newParamJ = json_object();
+				json_object_set(newParamJ, "value", paramJ);
+				params[i]->fromJson(newParamJ);
+				json_decref(newParamJ);
+			}
+		}
+		else {
+			// Get paramId
+			json_t *paramIdJ = json_object_get(paramJ, "paramId");
+			if (!paramIdJ)
+				continue;
+			int paramId = json_integer_value(paramIdJ);
+			// Find ParamWidget(s) with paramId
+			for (ParamWidget *paramWidget : params) {
+				if (paramWidget->paramId == paramId)
+					paramWidget->fromJson(paramJ);
+			}
 		}
 	}
 

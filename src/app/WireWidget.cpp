@@ -142,13 +142,33 @@ Vec WireWidget::getInputPos() {
 	}
 }
 
+json_t *WireWidget::toJson() {
+	json_t *rootJ = json_object();
+	json_object_set_new(rootJ, "color", colorToJson(color));
+	return rootJ;
+}
+
+void WireWidget::fromJson(json_t *rootJ) {
+	json_t *colorJ = json_object_get(rootJ, "color");
+	if (colorJ)
+		color = jsonToColor(colorJ);
+}
+
 void WireWidget::draw(NVGcontext *vg) {
 	float opacity = gToolbar->wireOpacitySlider->value / 100.0;
 	float tension = gToolbar->wireTensionSlider->value;
 
-	// Draw as opaque if an "incomplete" wire
-	if (!(inputPort && outputPort))
-		opacity = 1.0;
+	WireWidget *activeWire = gRackWidget->wireContainer->activeWire;
+	if (activeWire) {
+		// Draw as opaque if the wire is active
+		if (activeWire == this)
+			opacity = 1.0;
+	}
+	else {
+		Port *hoveredPort = dynamic_cast<Port*>(gHoveredWidget);
+		if (hoveredPort && (hoveredPort == outputPort || hoveredPort == inputPort))
+			opacity = 1.0;
+	}
 
 	Vec outputPos = getOutputPos();
 	Vec inputPos = getInputPos();

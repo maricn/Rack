@@ -39,6 +39,10 @@ struct AudioInterfaceIO : AudioIO {
 		maxInputs = MAX_INPUTS;
 	}
 
+	~AudioInterfaceIO() {
+		closeStream();
+	}
+
 	void processStream(const float *input, float *output, int length) override {
 		if (numInputs > 0) {
 			// TODO Do we need to wait on the input to be consumed here?
@@ -96,8 +100,8 @@ struct AudioInterface : Module {
 
 	AudioInterfaceIO audioIO;
 
-	SampleRateConverter<8> inputSrc;
-	SampleRateConverter<8> outputSrc;
+	SampleRateConverter<MAX_INPUTS> inputSrc;
+	SampleRateConverter<MAX_OUTPUTS> outputSrc;
 
 	// in rack's sample rate
 	DoubleRingBuffer<Frame<MAX_INPUTS>, 16> inputBuffer;
@@ -107,8 +111,6 @@ struct AudioInterface : Module {
 	}
 
 	void step() override;
-	void stepStream(const float *input, float *output, int numFrames);
-
 
 	json_t *toJson() override {
 		json_t *rootJ = json_object();
@@ -302,7 +304,4 @@ AudioInterfaceWidget::AudioInterfaceWidget() {
 	AudioWidget *audioWidget = construct<USB_B_AudioWidget>();
 	audioWidget->audioIO = &module->audioIO;
 	addChild(audioWidget);
-	// Widget *w = construct<DIN_MIDIWidget>();
-	// w->box.pos = Vec(100, 0);
-	// addChild(w);
 }

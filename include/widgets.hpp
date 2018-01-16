@@ -11,23 +11,7 @@
 #include "events.hpp"
 
 
-#define SVG_DPI 75.0
-
-
 namespace rack {
-
-
-inline Vec in2px(Vec inches) {
-	return inches.mult(SVG_DPI);
-}
-
-inline Vec mm2px(Vec millimeters) {
-	return millimeters.mult(SVG_DPI / 25.4);
-}
-
-#define CHECKMARK_STRING "✔"
-#define CHECKMARK(_cond) ((_cond) ? CHECKMARK_STRING : "")
-
 
 ////////////////////
 // resources
