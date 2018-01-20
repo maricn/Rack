@@ -110,7 +110,7 @@ void RackWidget::savePatch(std::string path) {
 
 	FILE *file = fopen(path.c_str(), "w");
 	if (file) {
-		json_dumpf(rootJ, file, JSON_INDENT(2));
+		json_dumpf(rootJ, file, JSON_INDENT(2) | JSON_REAL_PRECISION(9));
 		fclose(file);
 	}
 
@@ -263,7 +263,7 @@ void RackWidget::fromJson(json_t *rootJ) {
 		}
 
 		if (!model) {
-			message += stringf("Could not find module \"%s\" in plugin \"%s\"\n", pluginSlug.c_str(), modelSlug.c_str());
+			message += stringf("Could not find module \"%s\" in plugin \"%s\"\n", modelSlug.c_str(), pluginSlug.c_str());
 			continue;
 		}
 
