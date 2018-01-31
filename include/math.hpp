@@ -51,14 +51,18 @@ inline bool ispow2i(int n) {
 // float functions
 ////////////////////
 
+inline float absf(float x) {
+	return (x < 0.f) ? -x : x;
+}
+
 /** Returns 1.0 for positive numbers and -1.0 for negative numbers (including positive/negative zero) */
 inline float sgnf(float x) {
-	return copysignf(1.0, x);
+	return copysignf(1.f, x);
 }
 
 inline float eucmodf(float a, float base) {
 	float mod = fmodf(a, base);
-	return mod < 0.0 ? mod + base : mod;
+	return (mod < 0.f) ? mod + base : mod;
 }
 
 inline float nearf(float a, float b, float epsilon = 1e-6) {
@@ -66,10 +70,13 @@ inline float nearf(float a, float b, float epsilon = 1e-6) {
 }
 
 /** Limits a value between a minimum and maximum
-If min > max, returns min
+If min > max, clamps the range to [max, min]
 */
 inline float clampf(float x, float min, float max) {
-	return fmaxf(fminf(x, max), min);
+	if (min <= max)
+		return fmaxf(fminf(x, max), min);
+	else
+		return fmaxf(fminf(x, min), max);
 }
 
 /** If the magnitude of x if less than eps, return 0 */

@@ -22,7 +22,7 @@ struct MidiMessage {
 
 
 struct MidiIO {
-	int port = -1;
+	int device = -1;
 	/* For MIDI output, the channel to output messages.
 	For MIDI input, the channel to filter.
 	Set to -1 to allow all MIDI channels (for input).
@@ -32,15 +32,18 @@ struct MidiIO {
 	RtMidi *rtMidi = NULL;
 
 	virtual ~MidiIO() {}
-	int getPortCount();
-	std::string getPortName(int port);
-	void openPort(int port);
+	int getDeviceCount();
+	std::string getDeviceName(int device);
+	void openDevice(int device);
+	/** Returns whether the audio stream is open and running */
+	bool isActive();
 	json_t *toJson();
 	void fromJson(json_t *rootJ);
 };
 
 
 struct MidiInput : MidiIO {
+	RtMidiIn *rtMidiIn = NULL;
 	MidiInput();
 	~MidiInput();
 	virtual void onMessage(const MidiMessage &message) {}
@@ -54,6 +57,7 @@ struct MidiInputQueue : MidiInput {
 
 
 struct MidiOutput : MidiIO {
+	RtMidiOut *rtMidiOut = NULL;
 	MidiOutput();
 	~MidiOutput();
 };
