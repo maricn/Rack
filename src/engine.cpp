@@ -10,7 +10,6 @@
 #include <pmmintrin.h>
 
 #include "engine.hpp"
-#include "util.hpp"
 
 
 namespace rack {
@@ -36,14 +35,16 @@ static float smoothValue;
 
 
 float Light::getBrightness() {
-	return sqrtf(fmaxf(0.0, value));
+	// LEDs are diodes, so don't allow reverse current.
+	// For some reason, instead of the RMS, the sqrt of RMS looks better
+	return powf(fmaxf(0.f, value), 0.25f);
 }
 
-void Light::setBrightnessSmooth(float brightness) {
-	float v = (brightness > 0.0) ? brightness * brightness : 0.0;
+void Light::setBrightnessSmooth(float brightness, float frames) {
+	float v = (brightness > 0.f) ? brightness * brightness : 0.f;
 	if (v < value) {
-		// Fade out light with lambda = 2 * framerate
-		value += (v - value) * sampleTime * (60.0 * 2.0);
+		// Fade out light with lambda = framerate
+		value += (v - value) * sampleTime * frames * 60.f;
 	}
 	else {
 		// Immediately illuminate light
@@ -63,7 +64,7 @@ void engineInit() {
 }
 
 void engineDestroy() {
-	// Make sure there are no wires or modules in the rack on destruction. This suggests that a module failed to remove itself before the GUI was destroyed.
+	// Make sure there are no wires or modules in the rack on destruction. This suggests that a module failed to remove itself before the WINDOW was destroyed.
 	assert(wires.empty());
 	assert(modules.empty());
 }
@@ -73,15 +74,15 @@ static void engineStep() {
 	if (smoothModule) {
 		float value = smoothModule->params[smoothParamId].value;
 		const float lambda = 60.0; // decay rate is 1 graphics frame
-		const float snap = 0.0001;
 		float delta = smoothValue - value;
-		if (fabsf(delta) < snap) {
+		float newValue = value + delta * lambda * sampleTime;
+		if (value == newValue) {
+			// Snap to actual smooth value if the value doesn't change enough (due to the granularity of floats)
 			smoothModule->params[smoothParamId].value = smoothValue;
 			smoothModule = NULL;
 		}
 		else {
-			value += delta * lambda * sampleTime;
-			smoothModule->params[smoothParamId].value = value;
+			smoothModule->params[smoothParamId].value = newValue;
 		}
 	}
 
@@ -93,14 +94,14 @@ static void engineStep() {
 		// Step ports
 		for (Input &input : module->inputs) {
 			if (input.active) {
-				float value = input.value / 10.0;
+				float value = input.value / 5.f;
 				input.plugLights[0].setBrightnessSmooth(value);
 				input.plugLights[1].setBrightnessSmooth(-value);
 			}
 		}
 		for (Output &output : module->outputs) {
 			if (output.active) {
-				float value = output.value / 10.0;
+				float value = output.value / 5.f;
 				output.plugLights[0].setBrightnessSmooth(value);
 				output.plugLights[1].setBrightnessSmooth(-value);
 			}

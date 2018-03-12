@@ -1,12 +1,13 @@
 #pragma once
 
-#include "util.hpp"
-#include "math.hpp"
+// Include headers that plugins will likely use, for convenience
+#include "util/common.hpp"
 #include "asset.hpp"
 #include "plugin.hpp"
 #include "engine.hpp"
-#include "gui.hpp"
+#include "widgets.hpp"
 #include "app.hpp"
+#include "ui.hpp"
 #include "componentlibrary.hpp"
 
 
@@ -17,9 +18,9 @@ namespace rack {
 // helpers
 ////////////////////
 
-
+/** Deprecated, use Model::create<TModule, TModuleWidget>(...) instead */
 template <class TModuleWidget, typename... Tags>
-Model *createModel(std::string manufacturer, std::string slug, std::string name, Tags... tags) {
+DEPRECATED Model *createModel(std::string author, std::string slug, std::string name, Tags... tags) {
 	struct TModel : Model {
 		ModuleWidget *createModuleWidget() override {
 			ModuleWidget *moduleWidget = new TModuleWidget();
@@ -28,22 +29,24 @@ Model *createModel(std::string manufacturer, std::string slug, std::string name,
 		}
 	};
 	Model *model = new TModel();
-	model->manufacturer = manufacturer;
+	model->author = author;
 	model->slug = slug;
 	model->name = name;
 	model->tags = {tags...};
 	return model;
 }
 
+/** Deprecated, use Widget::create<TScrew>() instead */
 template <class TScrew>
-TScrew *createScrew(Vec pos) {
+DEPRECATED TScrew *createScrew(Vec pos) {
 	TScrew *screw = new TScrew();
 	screw->box.pos = pos;
 	return screw;
 }
 
+/** Deprecated, use ParamWidget::create<TParamWidget>() instead */
 template <class TParamWidget>
-TParamWidget *createParam(Vec pos, Module *module, int paramId, float minValue, float maxValue, float defaultValue) {
+DEPRECATED TParamWidget *createParam(Vec pos, Module *module, int paramId, float minValue, float maxValue, float defaultValue) {
 	TParamWidget *param = new TParamWidget();
 	param->box.pos = pos;
 	param->module = module;
@@ -53,8 +56,9 @@ TParamWidget *createParam(Vec pos, Module *module, int paramId, float minValue, 
 	return param;
 }
 
+/** Deprecated, use Port::create<TPort>(..., Port::INPUT, ...) instead */
 template <class TPort>
-TPort *createInput(Vec pos, Module *module, int inputId) {
+DEPRECATED TPort *createInput(Vec pos, Module *module, int inputId) {
 	TPort *port = new TPort();
 	port->box.pos = pos;
 	port->module = module;
@@ -63,8 +67,9 @@ TPort *createInput(Vec pos, Module *module, int inputId) {
 	return port;
 }
 
+/** Deprecated, use Port::create<TPort>(..., Port::OUTPUT, ...) instead */
 template <class TPort>
-TPort *createOutput(Vec pos, Module *module, int outputId) {
+DEPRECATED TPort *createOutput(Vec pos, Module *module, int outputId) {
 	TPort *port = new TPort();
 	port->box.pos = pos;
 	port->module = module;
@@ -73,8 +78,9 @@ TPort *createOutput(Vec pos, Module *module, int outputId) {
 	return port;
 }
 
+/** Deprecated, use ModuleLightWidget::create<TModuleLightWidget>() instead */
 template<class TModuleLightWidget>
-TModuleLightWidget *createLight(Vec pos, Module *module, int firstLightId) {
+DEPRECATED TModuleLightWidget *createLight(Vec pos, Module *module, int firstLightId) {
 	TModuleLightWidget *light = new TModuleLightWidget();
 	light->box.pos = pos;
 	light->module = module;

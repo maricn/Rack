@@ -1,6 +1,6 @@
 #include "settings.hpp"
 #include "app.hpp"
-#include "gui.hpp"
+#include "window.hpp"
 #include "engine.hpp"
 #include "plugin.hpp"
 #include <jansson.h>
@@ -20,14 +20,14 @@ static json_t *settingsToJson() {
 	json_t *tokenJ = json_string(gToken.c_str());
 	json_object_set_new(rootJ, "token", tokenJ);
 
-	if (!guiIsMaximized()) {
+	if (!windowIsMaximized()) {
 		// windowSize
-		Vec windowSize = guiGetWindowSize();
+		Vec windowSize = windowGetWindowSize();
 		json_t *windowSizeJ = json_pack("[f, f]", windowSize.x, windowSize.y);
 		json_object_set_new(rootJ, "windowSize", windowSizeJ);
 
 		// windowPos
-		Vec windowPos = guiGetWindowPos();
+		Vec windowPos = windowGetWindowPos();
 		json_t *windowPosJ = json_pack("[f, f]", windowPos.x, windowPos.y);
 		json_object_set_new(rootJ, "windowPos", windowPosJ);
 	}
@@ -64,6 +64,9 @@ static json_t *settingsToJson() {
 		json_object_set_new(rootJ, "skipAutosaveOnLaunch", json_true());
 	}
 
+	// moduleBrowser
+	json_object_set_new(rootJ, "moduleBrowser", appModuleBrowserToJson());
+
 	return rootJ;
 }
 
@@ -78,7 +81,7 @@ static void settingsFromJson(json_t *rootJ) {
 	if (windowSizeJ) {
 		double width, height;
 		json_unpack(windowSizeJ, "[F, F]", &width, &height);
-		guiSetWindowSize(Vec(width, height));
+		windowSetWindowSize(Vec(width, height));
 	}
 
 	// windowPos
@@ -86,7 +89,7 @@ static void settingsFromJson(json_t *rootJ) {
 	if (windowPosJ) {
 		double x, y;
 		json_unpack(windowPosJ, "[F, F]", &x, &y);
-		guiSetWindowPos(Vec(x, y));
+		windowSetWindowPos(Vec(x, y));
 	}
 
 	// opacity
@@ -102,7 +105,7 @@ static void settingsFromJson(json_t *rootJ) {
 	// zoom
 	json_t *zoomJ = json_object_get(rootJ, "zoom");
 	if (zoomJ) {
-		gRackScene->zoomWidget->setZoom(clampf(json_number_value(zoomJ), 0.25, 4.0));
+		gRackScene->zoomWidget->setZoom(clamp(json_number_value(zoomJ), 0.25f, 4.0f));
 		gToolbar->zoomSlider->setValue(json_number_value(zoomJ) * 100.0);
 	}
 
@@ -123,9 +126,15 @@ static void settingsFromJson(json_t *rootJ) {
 	if (lastPathJ)
 		gRackWidget->lastPath = json_string_value(lastPathJ);
 
+	// skipAutosaveOnLaunch
 	json_t *skipAutosaveOnLaunchJ = json_object_get(rootJ, "skipAutosaveOnLaunch");
 	if (skipAutosaveOnLaunchJ)
 		skipAutosaveOnLaunch = json_boolean_value(skipAutosaveOnLaunchJ);
+
+	// moduleBrowser
+	json_t * moduleBrowserJ = json_object_get(rootJ, "moduleBrowser");
+	if (moduleBrowserJ)
+		appModuleBrowserFromJson(moduleBrowserJ);
 }
 
 

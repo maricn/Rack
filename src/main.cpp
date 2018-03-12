@@ -1,11 +1,13 @@
+#include "util/common.hpp"
 #include "engine.hpp"
-#include "gui.hpp"
+#include "window.hpp"
 #include "app.hpp"
 #include "plugin.hpp"
 #include "settings.hpp"
 #include "asset.hpp"
+#include "bridge.hpp"
 #include <unistd.h>
-#include "../ext/osdialog/osdialog.h"
+#include "osdialog.h"
 
 
 using namespace rack;
@@ -32,30 +34,34 @@ int main(int argc, char* argv[]) {
 
 	pluginInit();
 	engineInit();
-	guiInit();
-	sceneInit();
+	bridgeInit();
+	windowInit();
+	appInit();
 	settingsLoad(assetLocal("settings.json"));
+	std::string oldLastPath = gRackWidget->lastPath;
 
 	// To prevent launch crashes, if Rack crashes between now and 15 seconds from now, the "skipAutosaveOnLaunch" property will remain in settings.json, so that in the next launch, the broken autosave will not be loaded.
 	bool oldSkipAutosaveOnLaunch = skipAutosaveOnLaunch;
 	skipAutosaveOnLaunch = true;
 	settingsSave(assetLocal("settings.json"));
 	skipAutosaveOnLaunch = false;
-	if (oldSkipAutosaveOnLaunch && osdialog_message(OSDIALOG_INFO, OSDIALOG_YES_NO, "Rack has recovered from a crash, likely caused by a faulty module in your patch. Would you like to clear your patch and start over?")) {
+	if (oldSkipAutosaveOnLaunch && osdialog_message(OSDIALOG_INFO, OSDIALOG_YES_NO, "Rack has recovered from a crash, possibly caused by a faulty module in your patch. Would you like to clear your patch and start over?")) {
 		// Do nothing. Empty patch is already loaded.
 	}
 	else {
 		gRackWidget->loadPatch(assetLocal("autosave.vcv"));
 	}
+	gRackWidget->lastPath = oldLastPath;
 
 	engineStart();
-	guiRun();
+	windowRun();
 	engineStop();
 
 	gRackWidget->savePatch(assetLocal("autosave.vcv"));
 	settingsSave(assetLocal("settings.json"));
-	sceneDestroy();
-	guiDestroy();
+	appDestroy();
+	windowDestroy();
+	bridgeDestroy();
 	engineDestroy();
 	pluginDestroy();
 

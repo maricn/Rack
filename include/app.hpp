@@ -2,9 +2,11 @@
 #include <vector>
 #include <jansson.h>
 #include "widgets.hpp"
+#include "ui.hpp"
 
 
-#define SVG_DPI 75.0
+static const float SVG_DPI = 75.0;
+static const float MM_PER_IN = 25.4;
 
 #define CHECKMARK_STRING "✔"
 #define CHECKMARK(_cond) ((_cond) ? CHECKMARK_STRING : "")
@@ -12,12 +14,20 @@
 
 namespace rack {
 
+inline float in2px(float inches) {
+	return inches * SVG_DPI;
+}
+
 inline Vec in2px(Vec inches) {
 	return inches.mult(SVG_DPI);
 }
 
+inline float mm2px(float millimeters) {
+	return millimeters * (SVG_DPI / MM_PER_IN);
+}
+
 inline Vec mm2px(Vec millimeters) {
-	return millimeters.mult(SVG_DPI / 25.4);
+	return millimeters.mult(SVG_DPI / MM_PER_IN);
 }
 
 
@@ -34,10 +44,10 @@ struct SVGPanel;
 // module
 ////////////////////
 
-// A 1HPx3U module should be 15x380. Thus the width of a module should be a factor of 15.
-#define RACK_GRID_WIDTH 15
-#define RACK_GRID_HEIGHT 380
-static const Vec RACK_GRID_SIZE = Vec(15, 380);
+// A 1HPx3U module should be 15x380 pixels. Thus the width of a module should be a factor of 15.
+static const float RACK_GRID_WIDTH = 15;
+static const float RACK_GRID_HEIGHT = 380;
+static const Vec RACK_GRID_SIZE = Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
 
 
 struct ModuleWidget : OpaqueWidget {
@@ -50,8 +60,8 @@ struct ModuleWidget : OpaqueWidget {
 	std::vector<Port*> outputs;
 	std::vector<ParamWidget*> params;
 
+	ModuleWidget(Module *module);
 	~ModuleWidget();
-	void setModule(Module *module);
 	/** Convenience functions for adding special widgets (calls addChild()) */
 	void addInput(Port *input);
 	void addOutput(Port *output);
@@ -77,9 +87,15 @@ struct ModuleWidget : OpaqueWidget {
 	Called when the user clicks Randomize in the context menu.
 	*/
 	virtual void randomize();
+	/** Do not subclass this to add context menu entries. Use appendContextMenu() instead */
 	virtual Menu *createContextMenu();
+	/** Override to add context menu entries to your subclass.
+	It is recommended to add a blank MenuEntry first for spacing.
+	*/
+	virtual void appendContextMenu(Menu *menu) {}
 
 	void draw(NVGcontext *vg) override;
+	void drawShadow(NVGcontext *vg);
 
 	Vec dragPos;
 	void onMouseDown(EventMouseDown &e) override;
@@ -142,6 +158,10 @@ struct RackWidget : OpaqueWidget {
 	void openDialog();
 	void saveDialog();
 	void saveAsDialog();
+	/** If `lastPath` is defined, ask the user to reload it */
+	void revert();
+	/** Disconnects all wires */
+	void disconnect();
 	void savePatch(std::string filename);
 	void loadPatch(std::string filename);
 	json_t *toJson();
@@ -155,6 +175,7 @@ struct RackWidget : OpaqueWidget {
 	bool requestModuleBox(ModuleWidget *m, Rect box);
 	/** Moves a module to the closest non-colliding position */
 	bool requestModuleBoxNearest(ModuleWidget *m, Rect box);
+
 	void step() override;
 	void draw(NVGcontext *vg) override;
 
@@ -165,13 +186,6 @@ struct RackWidget : OpaqueWidget {
 
 struct RackRail : TransparentWidget {
 	void draw(NVGcontext *vg) override;
-};
-
-struct AddModuleWindow : Window {
-	Vec modulePos;
-
-	AddModuleWindow();
-	void step() override;
 };
 
 struct Panel : TransparentWidget {
@@ -201,12 +215,25 @@ struct ParamWidget : OpaqueWidget, QuantityWidget {
 	To permanently disable or change randomization behavior, override the randomize() method instead of changing this.
 	*/
 	bool randomizable = true;
+	/** Apply per-sample smoothing in the engine */
+	bool smooth = false;
 
 	json_t *toJson();
 	void fromJson(json_t *rootJ);
+	virtual void reset();
 	virtual void randomize();
 	void onMouseDown(EventMouseDown &e) override;
 	void onChange(EventChange &e) override;
+
+	template <typename T = ParamWidget>
+	static T *create(Vec pos, Module *module, int paramId, float minValue, float maxValue, float defaultValue) {
+		T *o = Widget::create<T>(pos);
+		o->module = module;
+		o->paramId = paramId;
+		o->setLimits(minValue, maxValue);
+		o->setDefaultValue(defaultValue);
+		return o;
+	}
 };
 
 /** Implements vertical dragging behavior for ParamWidgets */
@@ -216,11 +243,10 @@ struct Knob : ParamWidget {
 	/** Multiplier for mouse movement to adjust knob value */
 	float speed = 1.0;
 	float dragValue;
+	Knob();
 	void onDragStart(EventDragStart &e) override;
 	void onDragMove(EventDragMove &e) override;
 	void onDragEnd(EventDragEnd &e) override;
-	/** Tell engine to smoothly vary this parameter */
-	void onChange(EventChange &e) override;
 };
 
 struct SpriteKnob : virtual Knob, SpriteWidget {
@@ -298,19 +324,62 @@ struct MomentarySwitch : virtual Switch {
 // IO widgets
 ////////////////////
 
-struct AudioIO;
-struct MidiIO;
+struct LedDisplay : VirtualWidget {
+	void draw(NVGcontext *vg) override;
+};
 
-struct AudioWidget : OpaqueWidget {
-	/** Not owned */
-	AudioIO *audioIO = NULL;
+struct LedDisplaySeparator : TransparentWidget {
+	LedDisplaySeparator();
+	void draw(NVGcontext *vg) override;
+};
+
+struct LedDisplayChoice : TransparentWidget {
+	std::string text;
+	std::shared_ptr<Font> font;
+	Vec textOffset;
+	NVGcolor color;
+	LedDisplayChoice();
+	void draw(NVGcontext *vg) override;
 	void onMouseDown(EventMouseDown &e) override;
 };
 
-struct MidiWidget : OpaqueWidget {
+struct LedDisplayTextField : TextField {
+	std::shared_ptr<Font> font;
+	Vec textOffset;
+	NVGcolor color;
+	LedDisplayTextField();
+	void draw(NVGcontext *vg) override;
+	int getTextPosition(Vec mousePos) override;
+};
+
+
+struct AudioIO;
+struct MidiIO;
+
+struct AudioWidget : LedDisplay {
+	/** Not owned */
+	AudioIO *audioIO = NULL;
+	LedDisplayChoice *driverChoice;
+	LedDisplaySeparator *driverSeparator;
+	LedDisplayChoice *deviceChoice;
+	LedDisplaySeparator *deviceSeparator;
+	LedDisplayChoice *sampleRateChoice;
+	LedDisplaySeparator *sampleRateSeparator;
+	LedDisplayChoice *bufferSizeChoice;
+	AudioWidget();
+	void step() override;
+};
+
+struct MidiWidget : LedDisplay {
 	/** Not owned */
 	MidiIO *midiIO = NULL;
-	void onMouseDown(EventMouseDown &e) override;
+	LedDisplayChoice *driverChoice;
+	LedDisplaySeparator *driverSeparator;
+	LedDisplayChoice *deviceChoice;
+	LedDisplaySeparator *deviceSeparator;
+	LedDisplayChoice *channelChoice;
+	MidiWidget();
+	void step() override;
 };
 
 ////////////////////
@@ -318,8 +387,8 @@ struct MidiWidget : OpaqueWidget {
 ////////////////////
 
 struct LightWidget : TransparentWidget {
-	NVGcolor bgColor = nvgRGBf(0, 0, 0);
-	NVGcolor color = nvgRGBf(1, 1, 1);
+	NVGcolor borderColor = nvgRGBA(0, 0, 0, 0);
+	NVGcolor color = nvgRGBA(0, 0, 0, 0);
 	void draw(NVGcontext *vg) override;
 	virtual void drawLight(NVGcontext *vg);
 	virtual void drawHalo(NVGcontext *vg);
@@ -327,6 +396,9 @@ struct LightWidget : TransparentWidget {
 
 /** Mixes a list of colors based on a list of brightness values */
 struct MultiLightWidget : LightWidget {
+	/** Color of the "off" state */
+	NVGcolor bgColor = nvgRGBA(0, 0, 0, 0);
+	/** Colors of each value state */
 	std::vector<NVGcolor> baseColors;
 	void addBaseColor(NVGcolor baseColor);
 	/** Sets the color to a linear combination of the baseColors with the given weights */
@@ -340,6 +412,14 @@ struct ModuleLightWidget : MultiLightWidget {
 	Module *module = NULL;
 	int firstLightId;
 	void step() override;
+
+	template <typename T = ModuleLightWidget>
+	static T *create(Vec pos, Module *module, int firstLightId) {
+		T *o = Widget::create<T>(pos);
+		o->module = module;
+		o->firstLightId = firstLightId;
+		return o;
+	}
 };
 
 ////////////////////
@@ -367,6 +447,15 @@ struct Port : OpaqueWidget {
 	void onDragDrop(EventDragDrop &e) override;
 	void onDragEnter(EventDragEnter &e) override;
 	void onDragLeave(EventDragEnter &e) override;
+
+	template <typename T = Port>
+	static T *create(Vec pos, PortType type, Module *module, int portId) {
+		T *o = Widget::create<T>(pos);
+		o->type = type;
+		o->module = module;
+		o->portId = portId;
+		return o;
+	}
 };
 
 struct SVGPort : Port, FramebufferWidget {
@@ -397,7 +486,7 @@ struct Toolbar : OpaqueWidget {
 	void draw(NVGcontext *vg) override;
 };
 
-struct PluginManagerWidget : Widget {
+struct PluginManagerWidget : VirtualWidget {
 	Widget *loginWidget;
 	Widget *manageWidget;
 	Widget *downloadWidget;
@@ -433,8 +522,12 @@ extern RackScene *gRackScene;
 extern RackWidget *gRackWidget;
 extern Toolbar *gToolbar;
 
-void sceneInit();
-void sceneDestroy();
+void appInit();
+void appDestroy();
+void appModuleBrowserCreate();
+json_t *appModuleBrowserToJson();
+void appModuleBrowserFromJson(json_t *rootJ);
+
 
 json_t *colorToJson(NVGcolor color);
 NVGcolor jsonToColor(json_t *colorJ);

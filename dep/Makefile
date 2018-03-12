@@ -18,7 +18,7 @@ export LDFLAGS
 
 
 # Commands
-WGET = curl -O
+WGET = curl -OL
 UNTAR = tar xf
 UNZIP = unzip
 ifeq ($(ARCH),win)
@@ -56,7 +56,7 @@ ifeq ($(ARCH),win)
 	glew = bin/glew32.dll
 	glfw = bin/glfw3.dll
 	jansson = bin/libjansson-4.dll
-	libspeexdsp = bin/libspeexdsp.dll
+	libspeexdsp = bin/libspeexdsp-1.dll
 	libcurl = bin/libcurl-4.dll
 	libzip = bin/libzip-5.dll
 	rtmidi = bin/librtmidi-4.dll
@@ -64,23 +64,15 @@ ifeq ($(ARCH),win)
 	openssl = bin/libssl-1_1-x64.dll
 endif
 
-# Library configuration
-ifdef RTAUDIO_ALL_APIS
-ifeq ($(ARCH),mac)
-	RTAUDIO_FLAGS = -DAUDIO_OSX_CORE=ON
-endif
-ifeq ($(ARCH),win)
-	RTAUDIO_FLAGS = -DAUDIO_WINDOWS_DS=ON -DAUDIO_WINDOWS_WASAPI=ON -DAUDIO_WINDOWS_ASIO=ON
-endif
-ifeq ($(ARCH),lin)
-	RTAUDIO_FLAGS = -DAUDIO_LINUX_ALSA=ON
-endif
-endif
+nanovg = include/nanovg.h
+nanosvg = include/nanosvg.h
+oui-blendish = include/blendish.h
+osdialog = include/osdialog.h
 
 
 .NOTPARALLEL:
 
-all: $(glew) $(glfw) $(jansson) $(libspeexdsp) $(libcurl) $(libzip) $(rtmidi) $(rtaudio)
+all: $(glew) $(glfw) $(jansson) $(libspeexdsp) $(libcurl) $(libzip) $(rtmidi) $(rtaudio) $(nanovg) $(nanosvg) $(oui-blendish) $(osdialog)
 	@echo ""
 	@echo "#######################################"
 	@echo "# Built all dependencies successfully #"
@@ -109,9 +101,9 @@ $(jansson):
 	$(MAKE) -C jansson-2.10 install
 
 $(libspeexdsp):
-	$(WGET) https://github.com/xiph/speexdsp/archive/SpeexDSP-1.2rc3.tar.gz
-	$(UNTAR) SpeexDSP-1.2rc3.tar.gz
-	cd speexdsp-SpeexDSP-1.2rc3 && ./autogen.sh && ./configure --prefix="$(LOCAL)"
+	$(WGET) https://vcvrack.com/downloads/dep/speexdsp-SpeexDSP-1.2rc3.tgz
+	$(UNTAR) speexdsp-SpeexDSP-1.2rc3.tgz
+	cd speexdsp-SpeexDSP-1.2rc3 && ./configure --prefix="$(LOCAL)"
 	$(MAKE) -C speexdsp-SpeexDSP-1.2rc3
 	$(MAKE) -C speexdsp-SpeexDSP-1.2rc3 install
 
@@ -120,7 +112,7 @@ $(openssl):
 	$(UNTAR) openssl-1.1.0g.tar.gz
 	cd openssl-1.1.0g && ./config --prefix="$(LOCAL)"
 	$(MAKE) -C openssl-1.1.0g
-	$(MAKE) -C openssl-1.1.0g install
+	$(MAKE) -C openssl-1.1.0g install_sw
 
 $(libcurl): $(openssl)
 	$(WGET) https://github.com/curl/curl/releases/download/curl-7_56_0/curl-7.56.0.tar.gz
@@ -140,16 +132,48 @@ $(libzip):
 	$(MAKE) -C libzip-1.2.0 install
 
 $(rtmidi):
-	git clone https://github.com/thestk/rtmidi.git
-	cd rtmidi && ./autogen.sh --no-configure && ./configure --prefix="$(LOCAL)"
+	$(WGET) https://vcvrack.com/downloads/dep/rtmidi.tgz
+	$(UNTAR) rtmidi.tgz
+	cd rtmidi && ./configure --prefix="$(LOCAL)"
 	$(MAKE) -C rtmidi
 	$(MAKE) -C rtmidi install
 
+ifeq ($(ARCH),mac)
+RTAUDIO_FLAGS += -DAUDIO_OSX_CORE=ON
+endif
+ifeq ($(ARCH),win)
+RTAUDIO_FLAGS += -DAUDIO_WINDOWS_DS=ON -DAUDIO_WINDOWS_WASAPI=ON -DAUDIO_WINDOWS_ASIO=ON
+endif
+ifeq ($(ARCH),lin)
+RTAUDIO_FLAGS += -DAUDIO_LINUX_ALSA=ON
+endif
+
+ifdef RTAUDIO_ALL_APIS
+ifeq ($(ARCH),mac)
+RTAUDIO_FLAGS += -DAUDIO_UNIX_JACK=ON
+endif
+ifeq ($(ARCH),lin)
+RTAUDIO_FLAGS += -DAUDIO_LINUX_PULSE=ON -DAUDIO_UNIX_JACK=ON
+endif
+endif
+
 $(rtaudio):
-	cd rtaudio && mkdir -p cmakebuild
-	cd rtaudio/cmakebuild && cmake -G 'Unix Makefiles' -DCMAKE_INSTALL_PREFIX="$(LOCAL)" $(RTAUDIO_FLAGS) ..
-	$(MAKE) -C rtaudio/cmakebuild
-	$(MAKE) -C rtaudio/cmakebuild install
+	cd rtaudio && mkdir -p build
+	cd rtaudio/build && cmake -G 'Unix Makefiles' -DCMAKE_INSTALL_PREFIX="$(LOCAL)" $(RTAUDIO_FLAGS) ..
+	$(MAKE) -C rtaudio/build
+	$(MAKE) -C rtaudio/build install
+
+$(nanovg):
+	cp nanovg/src/*.h include/
+
+$(nanosvg):
+	cp nanosvg/src/*.h include/
+
+$(oui-blendish):
+	cp oui-blendish/*.h include/
+
+$(osdialog):
+	cp osdialog/*.h include/
 
 clean:
 	git clean -ffdx

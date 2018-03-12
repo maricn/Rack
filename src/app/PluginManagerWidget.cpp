@@ -1,8 +1,8 @@
 #include <thread>
 #include "app.hpp"
 #include "plugin.hpp"
-#include "gui.hpp"
-#include "../ext/osdialog/osdialog.h"
+#include "window.hpp"
+#include "osdialog.h"
 
 
 namespace rack {
@@ -24,7 +24,7 @@ struct SyncButton : Button {
 		}
 		if (completed) {
 			if (osdialog_message(OSDIALOG_INFO, OSDIALOG_OK_CANCEL, "All plugins have been updated. Close Rack and re-launch it to load new updates.")) {
-				guiClose();
+				windowClose();
 			}
 			completed = false;
 		}

@@ -1,8 +1,7 @@
 #include "asset.hpp"
-#include "util.hpp"
-#include <assert.h>
+#include "util/common.hpp"
 #include <sys/stat.h> // for mkdir
-#include "../ext/osdialog/osdialog.h"
+#include "osdialog.h"
 
 #if ARCH_MAC
 #include <CoreFoundation/CoreFoundation.h>

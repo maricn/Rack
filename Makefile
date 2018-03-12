@@ -1,4 +1,5 @@
-VERSION = 0.6.0dev
+VERSION = master
+RACK_DIR = .
 
 FLAGS += \
 	-Iinclude \
@@ -8,14 +9,14 @@ ifdef RELEASE
 	FLAGS += -DRELEASE=$(RELEASE)
 endif
 
-SOURCES = $(wildcard src/*.cpp src/*/*.cpp) \
-	ext/nanovg/src/nanovg.c
+SOURCES += $(wildcard src/*.cpp src/*/*.cpp)
+SOURCES += dep/nanovg/src/nanovg.c
 
 
 include arch.mk
 
 ifeq ($(ARCH), lin)
-	SOURCES += ext/osdialog/osdialog_gtk2.c
+	SOURCES += dep/osdialog/osdialog_gtk2.c
 	CFLAGS += $(shell pkg-config --cflags gtk+-2.0)
 	LDFLAGS += -rdynamic \
 		-lpthread -lGL -ldl \
@@ -25,7 +26,7 @@ ifeq ($(ARCH), lin)
 endif
 
 ifeq ($(ARCH), mac)
-	SOURCES += ext/osdialog/osdialog_mac.m
+	SOURCES += dep/osdialog/osdialog_mac.m
 	CXXFLAGS += -DAPPLE -stdlib=libc++
 	LDFLAGS += -stdlib=libc++ -lpthread -ldl \
 		-framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo \
@@ -35,8 +36,8 @@ ifeq ($(ARCH), mac)
 endif
 
 ifeq ($(ARCH), win)
-	SOURCES += ext/osdialog/osdialog_win.c
-	LDFLAGS += -static-libgcc -static-libstdc++ -lpthread \
+	SOURCES += dep/osdialog/osdialog_win.c
+	LDFLAGS += -static-libgcc -static-libstdc++ -lpthread -lws2_32 \
 		-Wl,--export-all-symbols,--out-implib,libRack.a -mwindows \
 		-lgdi32 -lopengl32 -lcomdlg32 -lole32 \
 		-Ldep/lib -lglew32 -lglfw3dll -lcurl -lzip -lrtaudio -lrtmidi -lcrypto -lssl \
@@ -59,8 +60,7 @@ ifeq ($(ARCH), mac)
 	DYLD_FALLBACK_LIBRARY_PATH=dep/lib ./$<
 endif
 ifeq ($(ARCH), win)
-	# TODO get rid of the mingw64 path
-	env PATH=dep/bin:/mingw64/bin ./$<
+	env PATH="$(PATH)":dep/bin ./$<
 endif
 
 debug: $(TARGET)
@@ -71,8 +71,7 @@ ifeq ($(ARCH), mac)
 	DYLD_FALLBACK_LIBRARY_PATH=dep/lib gdb -ex run ./Rack
 endif
 ifeq ($(ARCH), win)
-	# TODO get rid of the mingw64 path
-	env PATH=dep/bin:/mingw64/bin gdb -ex run ./Rack
+	env PATH="$(PATH)":dep/bin gdb -ex run ./Rack
 endif
 
 perf: $(TARGET)
@@ -94,6 +93,8 @@ include compile.mk
 
 dist: all
 	rm -rf dist
+
+	# Rack distribution
 	$(MAKE) -C plugins/Fundamental dist
 
 ifeq ($(ARCH), mac)
@@ -183,6 +184,17 @@ ifeq ($(ARCH), lin)
 	# Make ZIP
 	cd dist && zip -5 -r Rack-$(VERSION)-$(ARCH).zip Rack
 endif
+
+	# Rack SDK distribution
+	mkdir -p dist/Rack-SDK
+	cp -R include dist/Rack-SDK/
+	cp *.mk dist/Rack-SDK/
+	mkdir -p dist/Rack-SDK/dep/
+	cp -R dep/include dist/Rack-SDK/dep/
+ifeq ($(ARCH), win)
+	cp libRack.a dist/Rack-SDK/
+endif
+	cd dist && zip -5 -r Rack-SDK-$(VERSION)-$(ARCH).zip Rack-SDK
 
 
 # Obviously this will only work if you have the private keys to my server

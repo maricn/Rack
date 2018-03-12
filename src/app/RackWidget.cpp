@@ -1,15 +1,33 @@
 #include "app.hpp"
 #include "engine.hpp"
 #include "plugin.hpp"
-#include "gui.hpp"
+#include "window.hpp"
 #include "settings.hpp"
 #include "asset.hpp"
 #include <map>
 #include <algorithm>
-#include "../ext/osdialog/osdialog.h"
+#include "osdialog.h"
 
 
 namespace rack {
+
+
+struct ModuleContainer : Widget {
+	void draw(NVGcontext *vg) override {
+		// Draw shadows behind each ModuleWidget first, so the shadow doesn't overlap the front.
+		for (Widget *child : children) {
+			if (!child->visible)
+				continue;
+			nvgSave(vg);
+			nvgTranslate(vg, child->box.pos.x, child->box.pos.y);
+			ModuleWidget *w = dynamic_cast<ModuleWidget*>(child);
+			w->drawShadow(vg);
+			nvgRestore(vg);
+		}
+
+		Widget::draw(vg);
+	}
+};
 
 
 RackWidget::RackWidget() {
@@ -23,7 +41,7 @@ RackWidget::RackWidget() {
 	}
 	addChild(rails);
 
-	moduleContainer = new Widget();
+	moduleContainer = new ModuleContainer();
 	addChild(moduleContainer);
 
 	wireContainer = new WireContainer();
@@ -39,24 +57,7 @@ void RackWidget::clear() {
 	moduleContainer->clearChildren();
 	lastPath = "";
 
-/*
-	// Add all modules to rack
-	Vec pos;
-	for (Plugin *plugin : gPlugins) {
-		for (Model *model : plugin->models) {
-			ModuleWidget *moduleWidget = model->createModuleWidget();
-			moduleContainer->addChild(moduleWidget);
-			// Move module nearest to the mouse position
-			Rect box;
-			box.size = moduleWidget->box.size;
-			box.pos = pos;
-			requestModuleBoxNearest(moduleWidget, box);
-			pos.x += box.size.x;
-		}
-		pos.y += RACK_GRID_HEIGHT;
-		pos.x = 0;
-	}
-*/
+	gRackScene->scrollWidget->offset = Vec(0, 0);
 }
 
 void RackWidget::reset() {
@@ -138,6 +139,22 @@ void RackWidget::loadPatch(std::string path) {
 	}
 
 	fclose(file);
+}
+
+void RackWidget::revert() {
+	if (lastPath.empty())
+		return;
+	if (osdialog_message(OSDIALOG_INFO, OSDIALOG_OK_CANCEL, "Revert your patch to the last saved state?")) {
+		loadPatch(lastPath);
+	}
+}
+
+void RackWidget::disconnect() {
+	for (Widget *w : moduleContainer->children) {
+		ModuleWidget *moduleWidget = dynamic_cast<ModuleWidget*>(w);
+		assert(moduleWidget);
+		moduleWidget->disconnect();
+	}
 }
 
 json_t *RackWidget::toJson() {
@@ -239,29 +256,7 @@ void RackWidget::fromJson(json_t *rootJ) {
 		std::string pluginSlug = json_string_value(pluginSlugJ);
 		std::string modelSlug = json_string_value(modelSlugJ);
 
-		// Search for plugin
-		Plugin *plugin = NULL;
-		for (Plugin *p : gPlugins) {
-			if (p->slug == pluginSlug) {
-				plugin = p;
-				break;
-			}
-		}
-
-		if (!plugin) {
-			message += stringf("Could not find plugin \"%s\" for module \"%s\"\n", pluginSlug.c_str(), modelSlug.c_str());
-			continue;
-		}
-
-		// Search for model
-		Model *model = NULL;
-		for (Model *m : plugin->models) {
-			if (m->slug == modelSlug) {
-				model = m;
-				break;
-			}
-		}
-
+		Model *model = pluginGetModel(pluginSlug, modelSlug);
 		if (!model) {
 			message += stringf("Could not find module \"%s\" in plugin \"%s\"\n", modelSlug.c_str(), pluginSlug.c_str());
 			continue;
@@ -374,8 +369,8 @@ bool RackWidget::requestModuleBoxNearest(ModuleWidget *m, Rect box) {
 	int x0 = roundf(box.pos.x / RACK_GRID_WIDTH);
 	int y0 = roundf(box.pos.y / RACK_GRID_HEIGHT);
 	std::vector<Vec> positions;
-	for (int y = maxi(0, y0 - 8); y < y0 + 8; y++) {
-		for (int x = maxi(0, x0 - 400); x < x0 + 400; x++) {
+	for (int y = max(0, y0 - 8); y < y0 + 8; y++) {
+		for (int x = max(0, x0 - 400); x < x0 + 400; x++) {
 			positions.push_back(Vec(x * RACK_GRID_WIDTH, y * RACK_GRID_HEIGHT));
 		}
 	}
@@ -437,15 +432,7 @@ void RackWidget::onMouseDown(EventMouseDown &e) {
 		return;
 
 	if (e.button == 1) {
-		MenuOverlay *overlay = new MenuOverlay();
-
-		AddModuleWindow *window = new AddModuleWindow();
-		// Set center position
-		window->box.pos = gMousePos.minus(window->box.getCenter());
-		window->modulePos = lastMousePos;
-
-		overlay->addChild(window);
-		gScene->setOverlay(overlay);
+		appModuleBrowserCreate();
 	}
 	e.consumed = true;
 	e.target = this;

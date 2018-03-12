@@ -1,7 +1,7 @@
 #include "app.hpp"
-#include "gui.hpp"
+#include "window.hpp"
 #include "util/request.hpp"
-#include "../ext/osdialog/osdialog.h"
+#include "osdialog.h"
 #include <string.h>
 #include <thread>
 
@@ -75,7 +75,7 @@ void RackScene::step() {
 		if (osdialog_message(OSDIALOG_INFO, OSDIALOG_YES_NO, versionMessage.c_str())) {
 			std::thread t(openBrowser, "https://vcvrack.com/");
 			t.detach();
-			guiClose();
+			windowClose();
 		}
 		newVersion = "";
 	}
@@ -86,43 +86,44 @@ void RackScene::draw(NVGcontext *vg) {
 }
 
 void RackScene::onHoverKey(EventHoverKey &e) {
-	switch (e.key) {
-		case GLFW_KEY_N:
-			if (guiIsModPressed() && !guiIsShiftPressed()) {
-				gRackWidget->reset();
-				e.consumed = true;
-				return;
-			}
-			break;
-		case GLFW_KEY_Q:
-			if (guiIsModPressed() && !guiIsShiftPressed()) {
-				guiClose();
-				e.consumed = true;
-				return;
-			}
-			break;
-		case GLFW_KEY_O:
-			if (guiIsModPressed() && !guiIsShiftPressed()) {
-				gRackWidget->openDialog();
-				e.consumed = true;
-				return;
-			}
-			break;
-		case GLFW_KEY_S:
-			if (guiIsModPressed() && !guiIsShiftPressed()) {
-				gRackWidget->saveDialog();
-				e.consumed = true;
-				return;
-			}
-			if (guiIsModPressed() && guiIsShiftPressed()) {
-				gRackWidget->saveAsDialog();
-				e.consumed = true;
-				return;
-			}
-			break;
-	}
-
 	Widget::onHoverKey(e);
+
+	if (!e.consumed) {
+		switch (e.key) {
+			case GLFW_KEY_N: {
+				if (windowIsModPressed() && !windowIsShiftPressed()) {
+					gRackWidget->reset();
+					e.consumed = true;
+				}
+			} break;
+			case GLFW_KEY_Q: {
+				if (windowIsModPressed() && !windowIsShiftPressed()) {
+					windowClose();
+					e.consumed = true;
+				}
+			} break;
+			case GLFW_KEY_O: {
+				if (windowIsModPressed() && !windowIsShiftPressed()) {
+					gRackWidget->openDialog();
+					e.consumed = true;
+				}
+			} break;
+			case GLFW_KEY_S: {
+				if (windowIsModPressed() && !windowIsShiftPressed()) {
+					gRackWidget->saveDialog();
+					e.consumed = true;
+				}
+				if (windowIsModPressed() && windowIsShiftPressed()) {
+					gRackWidget->saveAsDialog();
+					e.consumed = true;
+				}
+			} break;
+			case GLFW_KEY_ENTER: {
+				appModuleBrowserCreate();
+				e.consumed = true;
+			} break;
+		}
+	}
 }
 
 void RackScene::onPathDrop(EventPathDrop &e) {

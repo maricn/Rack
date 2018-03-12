@@ -8,7 +8,9 @@ namespace rack {
 
 
 struct ModuleWidget;
+struct Module;
 struct Model;
+
 
 // Subclass this and return a pointer to a new one when init() is called
 struct Plugin {
@@ -30,32 +32,68 @@ struct Plugin {
 	*/
 	std::string version;
 
-	/** URL for plugin homepage (optional) */
+	/** Deprecated, do not use. */
 	std::string website;
-	/** URL for plugin manual (optional) */
 	std::string manual;
 
 	virtual ~Plugin();
 	void addModel(Model *model);
 };
 
+
 struct Model {
 	Plugin *plugin = NULL;
-	/** An identifier for the model, e.g. "VCO". Used for saving patches. The slug, manufacturerSlug pair must be unique. */
+	/** An identifier for the model, e.g. "VCO". Used for saving patches.
+	The model slug must be unique in your plugin, but it doesn't need to be unique among different plugins.
+	*/
 	std::string slug;
 	/** Human readable name for your model, e.g. "Voltage Controlled Oscillator" */
 	std::string name;
-	/** The name of the manufacturer group of the module.
-	This might be different than the plugin slug. For example, if you create multiple plugins but want them to be branded similarly, you may use the same manufacturer name in multiple plugins.
-	You may even have multiple manufacturers in one plugin, although this would be unusual.
+	/** The author name of the module.
+	This might be different than the plugin slug. For example, if you create multiple plugins but want them to be branded similarly, you may use the same author in multiple plugins.
+	You may even have multiple authors in one plugin, although this property will be moved to Plugin for Rack 1.0.
 	*/
-	std::string manufacturer;
+	std::string author;
 	/** List of tags representing the function(s) of the module (optional) */
 	std::list<ModelTag> tags;
 
 	virtual ~Model() {}
+	/** Creates a headless Module */
+	virtual Module *createModule() { return NULL; }
+	/** Creates a ModuleWidget with a Module attached */
 	virtual ModuleWidget *createModuleWidget() { return NULL; }
+	/** Creates a ModuleWidget with no Module, useful for previews */
+	virtual ModuleWidget *createModuleWidgetNull() { return NULL; }
+
+	/** Create Model subclass which constructs a specific Module and ModuleWidget subclass */
+	template <typename TModule, typename TModuleWidget, typename... Tags>
+	static Model *create(std::string author, std::string slug, std::string name, Tags... tags) {
+		struct TModel : Model {
+			Module *createModule() override {
+				TModule *module = new TModule();
+				return module;
+			}
+			ModuleWidget *createModuleWidget() override {
+				TModule *module = new TModule();
+				TModuleWidget *moduleWidget = new TModuleWidget(module);
+				moduleWidget->model = this;
+				return moduleWidget;
+			}
+			ModuleWidget *createModuleWidgetNull() override {
+				TModuleWidget *moduleWidget = new TModuleWidget(NULL);
+				moduleWidget->model = this;
+				return moduleWidget;
+			}
+		};
+		TModel *o = new TModel();
+		o->author = author;
+		o->slug = slug;
+		o->name = name;
+		o->tags = {tags...};
+		return o;
+	}
 };
+
 
 void pluginInit();
 void pluginDestroy();
@@ -69,6 +107,8 @@ bool pluginIsDownloading();
 float pluginGetDownloadProgress();
 std::string pluginGetDownloadName();
 std::string pluginGetLoginStatus();
+Plugin *pluginGetPlugin(std::string pluginSlug);
+Model *pluginGetModel(std::string pluginSlug, std::string modelSlug);
 
 
 extern std::list<Plugin*> gPlugins;

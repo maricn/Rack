@@ -2,12 +2,10 @@
 #include <list>
 #include <memory>
 
-#include "../ext/nanovg/src/nanovg.h"
-#include "../ext/oui-blendish/blendish.h"
-#include "../ext/nanosvg/src/nanosvg.h"
+#include "nanovg.h"
+#include "nanosvg.h"
 
-#include "math.hpp"
-#include "util.hpp"
+#include "util/common.hpp"
 #include "events.hpp"
 
 
@@ -18,7 +16,7 @@ namespace rack {
 ////////////////////
 
 // Constructing these directly will load from the disk each time. Use the load() functions to load from disk and cache them as long as the shared_ptr is held.
-// Implemented in gui.cpp
+// Implemented in window.cpp
 
 struct Font {
 	int handle;
@@ -46,7 +44,9 @@ struct SVG {
 // Base widget
 ////////////////////
 
-/** A node in the 2D scene graph */
+/** A node in the 2D scene graph
+Never inherit from Widget directly. Instead, inherit from VirtualWidget declared below.
+*/
 struct Widget {
 	/** Stores position and size */
 	Rect box = Rect(Vec(), Vec(INFINITY, INFINITY));
@@ -140,9 +140,25 @@ struct Widget {
 	virtual void onAction(EventAction &e) {}
 	virtual void onChange(EventChange &e) {}
 	virtual void onZoom(EventZoom &e);
+
+	/** Helper function for creating and initializing a Widget with certain arguments (in this case just the position).
+	In this project, you will find this idiom everywhere, as an easier alternative to constructor arguments, for building a Widget (or a subclass) with a one-liner.
+	Example:
+		addChild(Widget::create<SVGWidget>(Vec(0, 0)))
+	*/
+	template <typename T = Widget>
+	static T *create(Vec pos) {
+		T *o = new T();
+		o->box.pos = pos;
+		return o;
+	}
 };
 
-struct TransformWidget : Widget {
+/** Instead of inheriting from Widget directly, inherit from VirtualWidget to guarantee that only one copy of Widget's member variables are used by each instance of the Widget hierarchy.
+*/
+struct VirtualWidget : virtual Widget {};
+
+struct TransformWidget : VirtualWidget {
 	/** The transformation matrix */
 	float transform[6];
 	TransformWidget();
@@ -154,7 +170,7 @@ struct TransformWidget : Widget {
 	void draw(NVGcontext *vg) override;
 };
 
-struct ZoomWidget : Widget {
+struct ZoomWidget : VirtualWidget {
 	float zoom = 1.0;
 	Vec getRelativeOffset(Vec v, Widget *relative) override;
 	Rect getViewport(Rect r) override;
@@ -173,7 +189,7 @@ struct ZoomWidget : Widget {
 ////////////////////
 
 /** Widget that does not respond to events */
-struct TransparentWidget : virtual Widget {
+struct TransparentWidget : VirtualWidget {
 	void onMouseDown(EventMouseDown &e) override {}
 	void onMouseUp(EventMouseUp &e) override {}
 	void onMouseMove(EventMouseMove &e) override {}
@@ -181,7 +197,7 @@ struct TransparentWidget : virtual Widget {
 };
 
 /** Widget that automatically responds to all mouse events but gives a chance for children to respond instead */
-struct OpaqueWidget : virtual Widget {
+struct OpaqueWidget : VirtualWidget {
 	void onMouseDown(EventMouseDown &e) override {
 		Widget::onMouseDown(e);
 		if (!e.target)
@@ -206,7 +222,7 @@ struct OpaqueWidget : virtual Widget {
 	}
 };
 
-struct SpriteWidget : virtual Widget {
+struct SpriteWidget : VirtualWidget {
 	Vec spriteOffset;
 	Vec spriteSize;
 	std::shared_ptr<Image> spriteImage;
@@ -214,7 +230,7 @@ struct SpriteWidget : virtual Widget {
 	void draw(NVGcontext *vg) override;
 };
 
-struct SVGWidget : virtual Widget {
+struct SVGWidget : VirtualWidget {
 	std::shared_ptr<SVG> svg;
 	/** Sets the box size to the svg image size */
 	void wrap();
@@ -227,7 +243,7 @@ struct SVGWidget : virtual Widget {
 When `dirty` is true, its children will be re-rendered on the next call to step() override.
 Events are not passed to the underlying scene.
 */
-struct FramebufferWidget : virtual Widget {
+struct FramebufferWidget : VirtualWidget {
 	/** Set this to true to re-render the children to the framebuffer the next time it is drawn */
 	bool dirty = true;
 	/** A margin in pixels around the children in the framebuffer
@@ -247,7 +263,8 @@ struct FramebufferWidget : virtual Widget {
 	void onZoom(EventZoom &e) override;
 };
 
-struct QuantityWidget : virtual Widget {
+/** A Widget representing a float value */
+struct QuantityWidget : VirtualWidget {
 	float value = 0.0;
 	float minValue = 0.0;
 	float maxValue = 1.0;
@@ -268,193 +285,6 @@ struct QuantityWidget : virtual Widget {
 	std::string getText();
 };
 
-////////////////////
-// GUI widgets
-////////////////////
-
-struct Label : Widget {
-	std::string text;
-	Label() {
-		box.size.y = BND_WIDGET_HEIGHT;
-	}
-	void draw(NVGcontext *vg) override;
-};
-
-/** Deletes itself from parent when clicked */
-struct MenuOverlay : OpaqueWidget {
-	void step() override;
-	void onMouseDown(EventMouseDown &e) override;
-	void onHoverKey(EventHoverKey &e) override;
-};
-
-struct MenuEntry;
-
-struct Menu : OpaqueWidget {
-	Menu *parentMenu = NULL;
-	Menu *childMenu = NULL;
-	/** The entry which created the child menu */
-	MenuEntry *activeEntry = NULL;
-
-	Menu() {
-		box.size = Vec(0, 0);
-	}
-	~Menu();
-	// Resizes menu and calls addChild()
-	void pushChild(Widget *child) DEPRECATED {
-		addChild(child);
-	}
-	void setChildMenu(Menu *menu);
-	void step() override;
-	void draw(NVGcontext *vg) override;
-	void onScroll(EventScroll &e) override;
-};
-
-struct MenuEntry : OpaqueWidget {
-	std::string text;
-	MenuEntry() {
-		box.size = Vec(0, BND_WIDGET_HEIGHT);
-	}
-};
-
-struct MenuLabel : MenuEntry {
-	void draw(NVGcontext *vg) override;
-	void step() override;
-};
-
-struct MenuItem : MenuEntry {
-	std::string rightText;
-	void draw(NVGcontext *vg) override;
-	void step() override;
-	virtual Menu *createChildMenu() {return NULL;}
-	void onMouseEnter(EventMouseEnter &e) override;
-	void onDragDrop(EventDragDrop &e) override;
-};
-
-struct WindowOverlay : OpaqueWidget {
-};
-
-struct Window : OpaqueWidget {
-	std::string title;
-	void draw(NVGcontext *vg) override;
-	void onDragMove(EventDragMove &e) override;
-};
-
-struct Button : OpaqueWidget {
-	std::string text;
-	BNDwidgetState state = BND_DEFAULT;
-
-	Button() {
-		box.size.y = BND_WIDGET_HEIGHT;
-	}
-	void draw(NVGcontext *vg) override;
-	void onMouseEnter(EventMouseEnter &e) override;
-	void onMouseLeave(EventMouseLeave &e) override;
-	void onDragStart(EventDragStart &e) override;
-	void onDragEnd(EventDragEnd &e) override;
-	void onDragDrop(EventDragDrop &e) override;
-};
-
-struct ChoiceButton : Button {
-	void draw(NVGcontext *vg) override;
-};
-
-struct RadioButton : OpaqueWidget, QuantityWidget {
-	BNDwidgetState state = BND_DEFAULT;
-
-	RadioButton() {
-		box.size.y = BND_WIDGET_HEIGHT;
-	}
-	void draw(NVGcontext *vg) override;
-	void onMouseEnter(EventMouseEnter &e) override;
-	void onMouseLeave(EventMouseLeave &e) override;
-	void onDragDrop(EventDragDrop &e) override;
-};
-
-struct Slider : OpaqueWidget, QuantityWidget {
-	BNDwidgetState state = BND_DEFAULT;
-
-	Slider() {
-		box.size.y = BND_WIDGET_HEIGHT;
-	}
-	void draw(NVGcontext *vg) override;
-	void onDragStart(EventDragStart &e) override;
-	void onDragMove(EventDragMove &e) override;
-	void onDragEnd(EventDragEnd &e) override;
-	void onMouseDown(EventMouseDown &e) override;
-};
-
-/** Parent must be a ScrollWidget */
-struct ScrollBar : OpaqueWidget {
-	enum { VERTICAL, HORIZONTAL } orientation;
-	BNDwidgetState state = BND_DEFAULT;
-	float offset = 0.0;
-	float size = 0.0;
-
-	ScrollBar() {
-		box.size = Vec(BND_SCROLLBAR_WIDTH, BND_SCROLLBAR_HEIGHT);
-	}
-	void draw(NVGcontext *vg) override;
-	void onDragStart(EventDragStart &e) override;
-	void onDragMove(EventDragMove &e) override;
-	void onDragEnd(EventDragEnd &e) override;
-};
-
-/** Handles a container with ScrollBar */
-struct ScrollWidget : OpaqueWidget {
-	Widget *container;
-	ScrollBar *horizontalScrollBar;
-	ScrollBar *verticalScrollBar;
-	Vec offset;
-
-	ScrollWidget();
-	void draw(NVGcontext *vg) override;
-	void step() override;
-	void onMouseMove(EventMouseMove &e) override;
-	void onScroll(EventScroll &e) override;
-};
-
-struct TextField : OpaqueWidget {
-	std::string text;
-	std::string placeholder;
-	bool multiline = false;
-	int begin = 0;
-	int end = 0;
-
-	TextField() {
-		box.size.y = BND_WIDGET_HEIGHT;
-	}
-	void draw(NVGcontext *vg) override;
-	void onMouseDown(EventMouseDown &e) override;
-	void onFocus(EventFocus &e) override;
-	void onText(EventText &e) override;
-	void onKey(EventKey &e) override;
-	void insertText(std::string newText);
-	virtual void onTextChange() {}
-};
-
-struct PasswordField : TextField {
-	void draw(NVGcontext *vg) override;
-};
-
-struct ProgressBar : TransparentWidget, QuantityWidget {
-	ProgressBar() {
-		box.size.y = BND_WIDGET_HEIGHT;
-	}
-	void draw(NVGcontext *vg) override;
-};
-
-struct Tooltip : Widget {
-	void step() override;
-	void draw(NVGcontext *vg) override;
-};
-
-struct Scene : OpaqueWidget {
-	Widget *overlay = NULL;
-	void setOverlay(Widget *w);
-	Menu *createMenu();
-	void step() override;
-};
-
 
 ////////////////////
 // globals
@@ -464,8 +294,6 @@ extern Widget *gHoveredWidget;
 extern Widget *gDraggedWidget;
 extern Widget *gDragHoveredWidget;
 extern Widget *gFocusedWidget;
-
-extern Scene *gScene;
 
 
 } // namespace rack

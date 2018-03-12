@@ -1,7 +1,7 @@
 #include "app.hpp"
 #include "engine.hpp"
 #include "componentlibrary.hpp"
-#include "gui.hpp"
+#include "window.hpp"
 
 
 namespace rack {
@@ -75,7 +75,7 @@ static const NVGcolor wireColors[] = {
 	nvgRGB(0xc9, 0x18, 0x47), // red
 	nvgRGB(0x0c, 0x8e, 0x15), // green
 	nvgRGB(0x09, 0x86, 0xad), // blue
-	nvgRGB(0x44, 0x44, 0x44), // black
+	// nvgRGB(0x44, 0x44, 0x44), // black
 	// nvgRGB(0x66, 0x66, 0x66), // gray
 	// nvgRGB(0x88, 0x88, 0x88), // light gray
 	// nvgRGB(0xaa, 0xaa, 0xaa), // white

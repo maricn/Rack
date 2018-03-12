@@ -1,28 +1,28 @@
 #include "app.hpp"
 #include "engine.hpp"
 #include "plugin.hpp"
-#include "gui.hpp"
+#include "window.hpp"
 
 
 namespace rack {
 
 
-ModuleWidget::~ModuleWidget() {
-	// Make sure WireWidget destructors are called *before* removing `module` from the rack.
-	disconnect();
-	// Remove and delete the Module instance
-	setModule(NULL);
-}
-
-void ModuleWidget::setModule(Module *module) {
-	if (this->module) {
-		engineRemoveModule(this->module);
-		delete this->module;
-	}
+ModuleWidget::ModuleWidget(Module *module) {
 	if (module) {
 		engineAddModule(module);
 	}
 	this->module = module;
+}
+
+ModuleWidget::~ModuleWidget() {
+	// Make sure WireWidget destructors are called *before* removing `module` from the rack.
+	disconnect();
+	// Remove and delete the Module instance
+	if (module) {
+		engineRemoveModule(module);
+		delete module;
+		module = NULL;
+	}
 }
 
 void ModuleWidget::addInput(Port *input) {
@@ -167,7 +167,7 @@ void ModuleWidget::_delete() {
 
 void ModuleWidget::reset() {
 	for (ParamWidget *param : params) {
-		param->setValue(param->defaultValue);
+		param->reset();
 	}
 	if (module) {
 		module->onReset();
@@ -185,31 +185,20 @@ void ModuleWidget::randomize() {
 
 void ModuleWidget::draw(NVGcontext *vg) {
 	nvgScissor(vg, 0, 0, box.size.x, box.size.y);
-
 	Widget::draw(vg);
-
-	// CPU usage text
-	if (0) {
-		float cpuTime = module ? module->cpuTime : 0.0;
-		std::string text = stringf("%.1f%%", cpuTime * 100.0);
-
-		nvgSave(vg);
-		nvgBeginPath(vg);
-		nvgRect(vg, 0.0, 0.0, box.size.x, BND_WIDGET_HEIGHT);
-		nvgFillColor(vg, nvgRGBf(0.0, 0.0, 0.0));
-		nvgFill(vg);
-
-		nvgBeginPath(vg);
-		cpuTime = clampf(cpuTime, 0.0, 1.0);
-		nvgRect(vg, 0.0, 0.0, box.size.x * cpuTime, BND_WIDGET_HEIGHT);
-		nvgFillColor(vg, nvgHSL(0.33 * cubic(1.0 - cpuTime), 1.0, 0.4));
-		nvgFill(vg);
-
-		bndMenuItem(vg, 0.0, 0.0, box.size.x, BND_WIDGET_HEIGHT, BND_DEFAULT, -1, text.c_str());
-		nvgRestore(vg);
-	}
-
 	nvgResetScissor(vg);
+}
+
+void ModuleWidget::drawShadow(NVGcontext *vg) {
+	nvgBeginPath(vg);
+	float r = 20; // Blur radius
+	float c = 20; // Corner radius
+	Vec b = Vec(-10, 30); // Offset from each corner
+	nvgRect(vg, b.x - r, b.y - r, box.size.x - 2*b.x + 2*r, box.size.y - 2*b.y + 2*r);
+	NVGcolor shadowColor = nvgRGBAf(0, 0, 0, 0.2);
+	NVGcolor transparentColor = nvgRGBAf(0, 0, 0, 0);
+	nvgFillPaint(vg, nvgBoxGradient(vg, b.x, b.y, box.size.x - 2*b.x, box.size.y - 2*b.y, c, r, shadowColor, transparentColor));
+	nvgFill(vg);
 }
 
 void ModuleWidget::onMouseDown(EventMouseDown &e) {
@@ -231,7 +220,7 @@ void ModuleWidget::onMouseMove(EventMouseMove &e) {
 	if (!gFocusedWidget) {
 		// Instead of checking key-down events, delete the module even if key-repeat hasn't fired yet and the cursor is hovering over the widget.
 		if (glfwGetKey(gWindow, GLFW_KEY_DELETE) == GLFW_PRESS || glfwGetKey(gWindow, GLFW_KEY_BACKSPACE) == GLFW_PRESS) {
-			if (!guiIsModPressed() && !guiIsShiftPressed()) {
+			if (!windowIsModPressed() && !windowIsShiftPressed()) {
 				gRackWidget->deleteModule(this);
 				this->finalizeEvents();
 				delete this;
@@ -244,27 +233,34 @@ void ModuleWidget::onMouseMove(EventMouseMove &e) {
 
 void ModuleWidget::onHoverKey(EventHoverKey &e) {
 	switch (e.key) {
-		case GLFW_KEY_I:
-			if (guiIsModPressed() && !guiIsShiftPressed()) {
+		case GLFW_KEY_I: {
+			if (windowIsModPressed() && !windowIsShiftPressed()) {
 				reset();
 				e.consumed = true;
 				return;
 			}
-			break;
-		case GLFW_KEY_R:
-			if (guiIsModPressed() && !guiIsShiftPressed()) {
+		} break;
+		case GLFW_KEY_R: {
+			if (windowIsModPressed() && !windowIsShiftPressed()) {
 				randomize();
 				e.consumed = true;
 				return;
 			}
-			break;
-		case GLFW_KEY_D:
-			if (guiIsModPressed() && !guiIsShiftPressed()) {
+		} break;
+		case GLFW_KEY_D: {
+			if (windowIsModPressed() && !windowIsShiftPressed()) {
 				gRackWidget->cloneModule(this);
 				e.consumed = true;
 				return;
 			}
-			break;
+		} break;
+		case GLFW_KEY_U: {
+			if (windowIsModPressed() && !windowIsShiftPressed()) {
+				disconnect();
+				e.consumed = true;
+				return;
+			}
+		} break;
 	}
 
 	Widget::onHoverKey(e);
@@ -325,29 +321,30 @@ Menu *ModuleWidget::createContextMenu() {
 	Menu *menu = gScene->createMenu();
 
 	MenuLabel *menuLabel = new MenuLabel();
-	menuLabel->text = model->manufacturer + " " + model->name;
+	menuLabel->text = model->author + " " + model->name;
 	menu->addChild(menuLabel);
 
 	ResetMenuItem *resetItem = new ResetMenuItem();
 	resetItem->text = "Initialize";
-	resetItem->rightText = GUI_MOD_KEY_NAME "+I";
+	resetItem->rightText = WINDOW_MOD_KEY_NAME "+I";
 	resetItem->moduleWidget = this;
 	menu->addChild(resetItem);
 
 	RandomizeMenuItem *randomizeItem = new RandomizeMenuItem();
 	randomizeItem->text = "Randomize";
-	randomizeItem->rightText = GUI_MOD_KEY_NAME "+R";
+	randomizeItem->rightText = WINDOW_MOD_KEY_NAME "+R";
 	randomizeItem->moduleWidget = this;
 	menu->addChild(randomizeItem);
 
 	DisconnectMenuItem *disconnectItem = new DisconnectMenuItem();
 	disconnectItem->text = "Disconnect cables";
+	disconnectItem->rightText = WINDOW_MOD_KEY_NAME "+U";
 	disconnectItem->moduleWidget = this;
 	menu->addChild(disconnectItem);
 
 	CloneMenuItem *cloneItem = new CloneMenuItem();
 	cloneItem->text = "Duplicate";
-	cloneItem->rightText = GUI_MOD_KEY_NAME "+D";
+	cloneItem->rightText = WINDOW_MOD_KEY_NAME "+D";
 	cloneItem->moduleWidget = this;
 	menu->addChild(cloneItem);
 
@@ -356,6 +353,8 @@ Menu *ModuleWidget::createContextMenu() {
 	deleteItem->rightText = "Backspace/Delete";
 	deleteItem->moduleWidget = this;
 	menu->addChild(deleteItem);
+
+	appendContextMenu(menu);
 
 	return menu;
 }
